@@ -452,11 +452,59 @@ python3 server.py
 
 ---
 
+## Model Benchmarking & Dynamic Runtime Switching
+
+DocChase incorporates an automated benchmarking suite ([bench.py](bench.py)) to evaluate speed, accuracy, and unit economics across different SLNG STT and TTS models for back-office operational voice workflows. Full results are recorded in [benchmark_results.md](benchmark_results.md).
+
+### STT & TTS Performance Summary
+
+| Category | Model | Latency / TTFA | Unit Cost | Key Operational Advantage |
+| :--- | :--- | :---: | :---: | :--- |
+| **STT** | **`slng/deepgram/nova:3-en`** *(Default)* | **472.0 ms** | $0.0043 / min | Low latency standard US English transcription. |
+| **STT** | **`sarvam/saaras:v3`** | **826.7 ms** | **$0.0018 / min** | **58% cheaper**; exact numeric outputs (`INS 104`, `case 102`) and top-tier accuracy on Indic/accented speech. |
+| **TTS** | **`deepgram/aura:2`** *(Default)* | **2,288.6 ms** | $0.015 / 1k chars | Single-shot HTTP REST, warm natural tone. |
+| **TTS** | **`murf/murftts:falcon`** | **897.6 ms** | $0.020 / 1k chars | **~2.5x faster initial voice kickoff** over streaming WebSockets. |
+
+### Switching Models in the Live App
+
+1. **Interactive Workbench Dropdowns**: Change STT or TTS models on the fly in the header of the web interface (`http://localhost:8000`).
+2. **Environment Variables**:
+   ```bash
+   # Select Speech-to-Text Model
+   export DOCCHASE_STT_MODEL="sarvam/saaras:v3"       # Default: slng/deepgram/nova:3-en
+
+   # Select Text-to-Speech Model
+   export DOCCHASE_TTS_MODEL="murf/murftts:falcon"     # Default: deepgram/aura:2
+   ```
+
+---
+
+## Global Operations Workforce: Hindi / Hinglish $\rightarrow$ English Response
+
+In global back-office centers (e.g. mortgage processing hubs in India), operations personnel may be more comfortable asking questions in **Hindi or Hinglish**, while institutional compliance requires formal documentation and spoken responses in standard English.
+
+DocChase natively bridges this gap:
+- **Understands Hindi & Hinglish**: Speech transcribed via Sarvam Saaras (`sarvam/saaras:v3`) and parsed across Latin and Devanagari scripts (*"case 101 mein kya missing hai?"*, *"borrower kaun hai?"*, *"केस 102 का विवरण बताओ"*).
+- **Responds in Professional English**: Synthesizes structured, deterministic English voice answers for clean record-keeping.
+
+---
+
+## Dynamic Case Details on Follow-Up
+
+DocChase retains conversational context across multi-turn sessions. When an operator asks for specific details on follow-up, DocChase dynamically retrieves granular case attributes without repeating generic templates:
+- **Borrower / Patient Identity**: *"who is the borrower?"* $\rightarrow$ returns borrower name, role, and domain.
+- **Specific Missing Field**: *"what field is missing?"* $\rightarrow$ returns exact field requirement and root exception.
+- **Extraction Confidence**: *"what is the confidence score?"* $\rightarrow$ returns exact OCR/extraction confidence and manual review flag.
+- **Evidence & Audit Trail**: *"what evidence is there?"* $\rightarrow$ returns document IDs and supporting evidence checklist.
+- **Risk & Sensitivity**: *"why is it sensitive?"* $\rightarrow$ explains fraud risk/quarantine flags preventing automated approval.
+
+---
+
 ## Running Tests
 
-DocChase includes a comprehensive automated test suite verifying guardrail enforcement, off-topic rejection, and API response contracts.
+DocChase includes a comprehensive automated test suite verifying guardrail enforcement, off-topic rejection, dynamic follow-up details, and Hindi query handling.
 
-Execute tests using `pytest` or `unittest`:
+Execute tests using `unittest`:
 ```bash
 python3 -m unittest test_guardrails.py -v
 ```
@@ -465,17 +513,29 @@ Expected output:
 ```text
 test_docchase_empty_text (test_guardrails.TestGuardrails) ... ok
 test_docchase_hello (test_guardrails.TestGuardrails) ... ok
+test_docchase_pdf_domain_query (test_guardrails.TestGuardrails) ... ok
 test_docchase_tell_me_about_pasta (test_guardrails.TestGuardrails) ... ok
 test_docchase_valid_in_scope (test_guardrails.TestGuardrails) ... ok
 test_docchase_whats_the_weather (test_guardrails.TestGuardrails) ... ok
+test_server_ask_borrower_inquiry (test_guardrails.TestGuardrails) ... ok
+test_server_ask_confidence_score_inquiry (test_guardrails.TestGuardrails) ... ok
+test_server_ask_devanagari_hindi_query (test_guardrails.TestGuardrails) ... ok
 test_server_ask_empty_text (test_guardrails.TestGuardrails) ... ok
+test_server_ask_followup_specific_details (test_guardrails.TestGuardrails) ... ok
 test_server_ask_hello (test_guardrails.TestGuardrails) ... ok
+test_server_ask_hinglish_query (test_guardrails.TestGuardrails) ... ok
+test_server_ask_no_default_case_fallback (test_guardrails.TestGuardrails) ... ok
+test_server_ask_off_topic_with_session_case (test_guardrails.TestGuardrails) ... ok
+test_server_ask_pdf_domain_healthcare (test_guardrails.TestGuardrails) ... ok
+test_server_ask_pdf_domain_query (test_guardrails.TestGuardrails) ... ok
+test_server_ask_pdf_specific_case (test_guardrails.TestGuardrails) ... ok
+test_server_ask_session_last_case_id (test_guardrails.TestGuardrails) ... ok
 test_server_ask_tell_me_about_pasta (test_guardrails.TestGuardrails) ... ok
 test_server_ask_valid_in_scope (test_guardrails.TestGuardrails) ... ok
 test_server_ask_whats_the_weather (test_guardrails.TestGuardrails) ... ok
-...
+
 ----------------------------------------------------------------------
-Ran 13 tests in 0.421s
+Ran 22 tests in 0.582s
 
 OK
 ```
@@ -489,6 +549,8 @@ OK
 - [x] Deterministic zero-hallucination exception and precedent matching.
 - [x] Active Document Workbench with side-by-side thumbnail previews.
 - [x] Multi-turn conversational memory and pronoun resolution.
+- [x] Automated STT/TTS benchmarking suite ([bench.py](bench.py)) and model switching dropdowns.
+- [x] Global workforce cross-lingual understanding (Hindi/Hinglish to English response).
 - [x] Tamper-evident Human-in-the-Loop audit logging (`approvals.log`).
 - [ ] Multimodal VLM ingestion for automated document field extraction (Form 1003, CMS-1500).
 - [ ] Real-time webhook dispatch to Encompass, Blend, and Epic EHR.
