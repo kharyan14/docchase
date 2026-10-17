@@ -97,16 +97,17 @@ def get_active_keys() -> list:
     return active if active else cooling
 
 
-def speak(
+_SESSION = requests.Session()
+
+
+def synthesize(
     text: str,
-    output_path: str = "case102_missing.wav",
     voice: str = "aura-2-luna-en",
     model: str = "deepgram/aura:2",
-    play: bool = True,
-) -> str:
+) -> bytes:
     """
-    Converts input text to speech using the SLNG Voice AI API with dynamic key failover.
-    Prioritises the new key over the first one; dynamically fails over if usage is high.
+    Direct in-memory speech synthesis using persistent connection pooling.
+    Eliminates disk I/O and TLS renegotiation latency.
     """
     load_env_file()
 
@@ -118,11 +119,9 @@ def speak(
     endpoint = f"{base_url}/v1/tts/{model}"
 
     last_error = None
-    response = None
-
     for idx, key in enumerate(keys_to_try):
         try:
-            res = requests.post(
+            res = _SESSION.post(
                 endpoint,
                 headers={
                     "Authorization": f"Bearer {key}",
@@ -132,32 +131,45 @@ def speak(
                     "text": text,
                     "model": voice,
                 },
-                timeout=30,
+                timeout=20,
             )
-            # If rate limit (429) or high-usage temporary error (502, 503, 504), failover
             if res.status_code in (429, 402, 403, 502, 503, 504) and len(keys_to_try) > 1 and idx < len(keys_to_try) - 1:
                 mark_key_rate_limited(key, cooldown_seconds=60.0)
                 last_error = requests.HTTPError(f"HTTP {res.status_code}: {res.text}", response=res)
                 continue
 
             res.raise_for_status()
-            response = res
-            break
+            return res.content
         except requests.exceptions.RequestException as e:
             last_error = e
             if idx < len(keys_to_try) - 1:
                 continue
             raise e
 
-    if response is None and last_error is not None:
+    if last_error:
         raise last_error
+    raise RuntimeError("TTS synthesis failed unexpectedly.")
+
+
+def speak(
+    text: str,
+    output_path: str = "case102_missing.wav",
+    voice: str = "aura-2-luna-en",
+    model: str = "deepgram/aura:2",
+    play: bool = True,
+) -> str:
+    """
+    Converts input text to speech using the SLNG Voice AI API with dynamic key failover.
+    Prioritises the new key over the first one; dynamically fails over if usage is high.
+    """
+    audio_content = synthesize(text, voice=voice, model=model)
 
     # Save audio binary content (WAV) to disk
     resolved_output = Path(output_path).resolve()
     with open(resolved_output, "wb") as f:
-        f.write(response.content)
+        f.write(audio_content)
 
-    print(f"Saved synthesized speech ({len(response.content):,} bytes) to: {resolved_output}")
+    print(f"Saved synthesized speech ({len(audio_content):,} bytes) to: {resolved_output}")
 
     # Play the audio file
     if play:

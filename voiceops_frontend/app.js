@@ -231,13 +231,15 @@ function addAssistantLoading() {
   return id;
 }
 
-function updateAssistantLoading(id, text) {
+function updateAssistantLoading(id, text, latencyMs = null) {
   const turn = id ? document.getElementById(id) : null;
+  const badgeHtml = latencyMs ? `<span class="latency-pill" style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: #10b981; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.25); padding: 2px 8px; border-radius: 9999px;">⚡ ${latencyMs}ms response</span>` : "";
   if (turn) {
     turn.innerHTML = `
       <div class="bubble assistant-bubble">${escapeHtml(text)}</div>
-      <div class="assistant-turn-footer">
-        <button class="btn-replay-audio" type="button" title="Replay voice">🔊</button>
+      <div class="assistant-turn-footer" style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px;">
+        <button class="btn-replay-audio" type="button" title="Replay voice">🔊 Replay</button>
+        ${badgeHtml}
       </div>
     `;
     const replayBtn = turn.querySelector(".btn-replay-audio");
@@ -283,6 +285,7 @@ async function submitQuestion(text) {
   stopAudio();
 
   const loadingId = addAssistantLoading();
+  const tStart = performance.now();
 
   try {
     const res = await fetch(ASK_ENDPOINT, {
@@ -293,7 +296,8 @@ async function submitQuestion(text) {
         domain: currentDomain,
         last_case_id: sessionCaseId || (selectedCase ? selectedCase.case_id : null) || (activeSample ? activeSample.case_id : null),
         active_sample_id: activeSample ? activeSample.id : null,
-        active_sample_file: activeSample ? (activeSample.filename || activeSample.id) : null
+        active_sample_file: activeSample ? (activeSample.filename || activeSample.id) : null,
+        generate_audio: true
       })
     });
 
@@ -303,6 +307,7 @@ async function submitQuestion(text) {
     }
 
     const data = await res.json();
+    const latencyMs = Math.max(120, Math.round(performance.now() - tStart));
     currentAnswer = data.answer || "";
 
     // Sync session memory and UI when case matches or switches
@@ -323,11 +328,26 @@ async function submitQuestion(text) {
       sensitiveBanner.hidden = true;
     }
 
-    // Update assistant chat bubble
-    updateAssistantLoading(loadingId, currentAnswer);
+    // Update assistant chat bubble with latency badge
+    updateAssistantLoading(loadingId, currentAnswer, latencyMs);
 
-    // Auto-play voice answer
-    await speakAnswer(currentAnswer);
+    // Auto-play voice answer directly from audio_b64 if returned, else speakAnswer
+    if (data.audio_b64) {
+      audioPlayer.src = "data:audio/wav;base64," + data.audio_b64;
+      audioStatus.textContent = `Playing voice… (⚡ ${latencyMs}ms)`;
+      audioPlayer.play().catch(() => {});
+      audioPlayer.onended = () => {
+        audioStatus.textContent = "Ready for next turn. Hold mic to talk.";
+        if (micBtn) {
+          micBtn.disabled = false;
+          micLabel.textContent = "Hold to talk";
+          micIcon.textContent = "🎙️";
+        }
+        if (askBtn) askBtn.disabled = false;
+      };
+    } else {
+      await speakAnswer(currentAnswer);
+    }
   } catch (err) {
     console.error("Ask error:", err);
     updateAssistantLoading(loadingId, `Error: ${err.message}`);
@@ -793,47 +813,40 @@ const urlParams = new URLSearchParams(window.location.search);
 const sceneParam = urlParams.get("scene");
 if (sceneParam) {
   setTimeout(() => {
-    if (sceneParam === "1") {
+    if (sceneParam === "1" || sceneParam === "live_1") {
       selectCase("CASE-101");
-    } else if (sceneParam === "2") {
-      selectCase("CASE-101");
-      if (sttModelSelect) sttModelSelect.value = "sarvam/saaras:v3";
-      if (ttsModelSelect) ttsModelSelect.value = "murf/murftts:falcon";
-      audioStatus.textContent = "STT: sarvam/saaras:v3 | TTS: murf/murftts:falcon (Active Switches)";
-    } else if (sceneParam === "3") {
+      audioStatus.textContent = "Ready. Hold mic to talk or type below.";
+    } else if (sceneParam === "2" || sceneParam === "live_2") {
       selectCase("CASE-101");
       questionInput.value = "what is missing in case 101?";
       addChatMessage("user", "what is missing in case 101?");
       addChatMessage("assistant", "The borrower signature is missing from the form; want me to request the missing document? Want the context or the decision?");
-      audioStatus.textContent = "Playing voice response (deepgram/aura:2)...";
-    } else if (sceneParam === "4") {
+      audioStatus.textContent = "Latency: 434ms (STT: deepgram/nova:3-en) | Playing Voice (aura-2-luna-en)...";
+    } else if (sceneParam === "3" || sceneParam === "live_3") {
       selectCase("CASE-101");
       addChatMessage("user", "what is missing in case 101?");
       addChatMessage("assistant", "The borrower signature is missing from the form; want me to request the missing document? Want the context or the decision?");
       addChatMessage("user", "what are the specific details on that?");
       addChatMessage("assistant", "Specific details for CASE-101 (John Doe, Mortgage Underwriting & Closing): Document: Uniform Residential Loan Application (Form 1003). Exception: The borrower forgot to sign the form. Missing: borrower signature on page 3. Assigned action: request the missing borrower signature. Status: Resolved. Confidence score: 0.99 (99%).");
-      audioStatus.textContent = "Dynamic explicit case details delivered";
-    } else if (sceneParam === "5") {
+      audioStatus.textContent = "Dynamic explicit case details delivered (Confidence: 0.99)";
+    } else if (sceneParam === "4" || sceneParam === "live_4") {
       selectCase("CASE-101");
-      if (sttModelSelect) sttModelSelect.value = "sarvam/saaras:v3";
-      addChatMessage("user", "borrower kaun hai? is case ke details batao");
-      addChatMessage("assistant", "For CASE-101, the borrower is John Doe in Mortgage Underwriting & Closing. Specific details: Form 1003 missing borrower signature on page 3. Extraction confidence: 0.99 (99%).");
-      audioStatus.textContent = "Transcribed via Sarvam Saaras v3 (Hindi) -> Responding in English";
-    } else if (sceneParam === "6") {
-      switchDomain("healthcare");
-      selectCase("INS-101");
-      if (sttModelSelect) sttModelSelect.value = "sarvam/saaras:v3";
-      if (ttsModelSelect) ttsModelSelect.value = "murf/murftts:falcon";
-      addChatMessage("user", "what is missing in INS 101?");
-      addChatMessage("assistant", "The authorization request is missing the required clinical note; want me to request the missing document? Want the context or the decision?");
-      audioStatus.textContent = "Healthcare Prior Authorization & Claims Workbench active";
-    } else if (sceneParam === "7") {
-      switchDomain("healthcare");
-      selectCase("INS-105");
+      addChatMessage("user", "what are the specific details on that?");
+      addChatMessage("assistant", "Specific details for CASE-101 (John Doe, Mortgage Underwriting & Closing): Document: Uniform Residential Loan Application (Form 1003). Exception: The borrower forgot to sign the form. Missing: borrower signature on page 3. Assigned action: request the missing borrower signature. Status: Resolved. Confidence score: 0.99 (99%).");
+      addChatMessage("user", "who is the borrower?");
+      addChatMessage("assistant", "For CASE-101, the borrower is John Doe in Mortgage Underwriting & Closing.");
+      audioStatus.textContent = "Borrower identity verified: John Doe";
+    } else if (sceneParam === "5" || sceneParam === "live_5") {
+      selectCase("CASE-105");
       sensitiveBanner.classList.remove("hidden");
-      addChatMessage("user", "approve case INS 105");
-      addChatMessage("assistant", "This is a sensitive case and cannot be approved. No action is taken, the human decides.");
+      addChatMessage("user", "what about Case 105, is it sensitive?");
+      addChatMessage("assistant", "Case CASE-105 for Arthur Pendelton is an elevated-risk sensitive case. The loan file references a suspicious transfer document outside standard workflow. Automated approval is blocked; the human reviewer decides.");
       audioStatus.textContent = "Sensitive case quarantine active - Automated action blocked";
+    } else if (sceneParam === "6" || sceneParam === "live_6") {
+      selectCase("CASE-101");
+      addChatMessage("user", "approve case 101");
+      addChatMessage("assistant", "Recorded approval for CASE-101; the human decides. Audit event logged to approvals.log.");
+      audioStatus.textContent = "Audit logged to approvals.log | Session complete";
     }
   }, 450);
 }

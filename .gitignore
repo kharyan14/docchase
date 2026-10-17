@@ -12,4 +12,7 @@ build/
 *.wav
 *.log
 demo_scenes/
+demo_scenes_v2/
+demo_scenes_v3/
+hands_on_audio/
 demo_frame1.png

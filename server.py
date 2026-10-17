@@ -43,6 +43,7 @@ class AskRequest(BaseModel):
     last_case_id: Optional[str] = None
     active_sample_id: Optional[str] = None
     active_sample_file: Optional[str] = None
+    generate_audio: Optional[bool] = False
 
 
 class SpeakRequest(BaseModel):
@@ -230,11 +231,20 @@ async def ask_question(req: AskRequest):
         if len(case_ids) > 1:
             answer_text = f"{answer_text} One case at a time, ask about the next one after this."
 
-    return {
+    response_payload = {
         "case_id": case_id,
         "question_type": q_type,
         "answer": answer_text,
     }
+
+    if req.generate_audio and answer_text:
+        try:
+            audio_bytes = speak.synthesize(answer_text, voice="aura-2-luna-en", model="deepgram/aura:2")
+            response_payload["audio_b64"] = base64.b64encode(audio_bytes).decode("ascii")
+        except Exception as err:
+            print(f"Warning: Audio pre-generation failed: {err}")
+
+    return response_payload
 
 
 @app.post("/voice/speak")
@@ -294,12 +304,9 @@ async def voice_speak(req: SpeakRequest):
         if last_err:
             raise HTTPException(status_code=502, detail=f"Murf TTS failed: {str(last_err)}")
 
-    # Default: Deepgram Aura-2 via speak.py
-    output_wav = Path(__file__).resolve().parent / "server_speak.wav"
+    # Default: Deepgram Aura-2 via in-memory synthesize
     try:
-        speak.speak(text, output_path=str(output_wav), play=False)
-        with open(output_wav, "rb") as f:
-            audio_bytes = f.read()
+        audio_bytes = speak.synthesize(text, voice="aura-2-luna-en", model=tts_model)
         return Response(content=audio_bytes, media_type="audio/wav")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
