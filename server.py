@@ -35,6 +35,8 @@ class AskRequest(BaseModel):
     text: Optional[str] = ""
     domain: Optional[str] = None
     last_case_id: Optional[str] = None
+    active_sample_id: Optional[str] = None
+    active_sample_file: Optional[str] = None
 
 
 class SpeakRequest(BaseModel):
@@ -118,7 +120,26 @@ async def ask_question(req: AskRequest):
             "answer": docchase.UNCLEAR_REPLY,
         }
 
-    # Guardrail 2: Question must match one of the 4 question types (missing, context, decision, approve)
+    # PDF / Document & Domain Question Answering
+    from pdf_inspector import INSPECTOR
+    has_sample = bool(req.active_sample_id or req.active_sample_file)
+    pdf_doc = INSPECTOR.get_pdf_for_query(
+        raw_text,
+        case_id=last_cid,
+        sample_id=req.active_sample_id,
+        sample_file=req.active_sample_file,
+        domain=domain,
+    )
+    if pdf_doc and INSPECTOR.matches_pdf_query(raw_text, pdf_doc, has_explicit_sample=has_sample):
+        ans, qtype, cid = INSPECTOR.answer_pdf_query(raw_text, pdf_doc)
+        resolved_cid = cid or last_cid or pdf_doc.get("canonical_case_id")
+        return {
+            "case_id": resolved_cid,
+            "question_type": qtype or "domain",
+            "answer": ans,
+        }
+
+    # Guardrail 2: Question must match one of the valid question types
     q_type = docchase.get_question_type(raw_text)
     if not q_type or q_type not in docchase.VALID_QUESTION_TYPES:
         return {

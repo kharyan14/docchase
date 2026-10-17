@@ -6,7 +6,7 @@ from typing import Optional
 
 OFF_TOPIC_REPLY = "I can only help with open mortgage and healthcare exception cases. Ask me what's missing, the context, or what to decide."
 UNCLEAR_REPLY = "sorry, say that again?"
-VALID_QUESTION_TYPES = {"missing", "context", "decision", "approve"}
+VALID_QUESTION_TYPES = {"missing", "context", "decision", "approve", "domain", "document"}
 
 
 def is_unclear_or_short(text: str) -> bool:
@@ -36,6 +36,10 @@ def get_question_type(text: str) -> Optional[str]:
         return "decision"
     if re.search(r"\b(missing|status|problem|what\'?s\s*wrong|what\s+is\s+wrong|what\'?s\s*(?:the\s*)?issue|what\s+is\s*(?:the\s*)?issue|what\'?s\s*missing|what\s+is\s*missing|documents?)\b", t):
         return "missing"
+    if re.search(r"\b(domain|belong\s+to|what\s+domain|which\s+domain|mortgage\s+or\s+healthcare|category)\b", t):
+        return "domain"
+    if re.search(r"\b(pdf|packet|file|report|form|application|paystub|invoice)\b", t):
+        return "document"
     return None
 
 
@@ -174,13 +178,14 @@ def answer(case_number, question_type=None, last_case_id=None):
 
         case = find_case(open_cases, raw)
         if not case:
-            import main
-            cids, _ = main.find_case_ids(raw, open_cases)
-            if cids:
-                case = open_cases[cids[0]]
-            elif last_case_id and last_case_id in open_cases:
-                case = open_cases[last_case_id]
-        if not case:
+            try:
+                from pdf_inspector import INSPECTOR
+                pdf_doc = INSPECTOR.get_pdf_for_query(raw, case_id=last_case_id)
+                if pdf_doc and INSPECTOR.matches_pdf_query(raw, pdf_doc):
+                    ans, _, _ = INSPECTOR.answer_pdf_query(raw, pdf_doc)
+                    return ans
+            except Exception:
+                pass
             return OFF_TOPIC_REPLY
 
     domain = case["domain"]
@@ -262,6 +267,10 @@ def answer(case_number, question_type=None, last_case_id=None):
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(f"[{case['case_id']}] APPROVED by human\n")
         return f"Recorded approval for {case['case_id']}; the human decides."
+
+    elif q_type in ("domain", "document"):
+        domain_name = "Mortgage Underwriting & Closing" if domain == "mortgage" else "Healthcare Prior Authorization & Claims"
+        return f"This document belongs to the {domain_name} domain. It is associated with {case['case_id']}, where {action_text} is expected."
 
     else:
         return OFF_TOPIC_REPLY

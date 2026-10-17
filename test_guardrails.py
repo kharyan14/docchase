@@ -100,6 +100,47 @@ class TestGuardrails(unittest.TestCase):
         data = resp.json()
         self.assertEqual(data["answer"], self.expected_off_topic)
 
+    # --- Tests for PDF, Document and Domain Questions (No false-positive guardrails) ---
+    def test_server_ask_pdf_domain_query(self):
+        resp = self.client.post(
+            "/ask",
+            json={"text": "please go through the pdf and tell me what domain does this belong to"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertNotEqual(data["answer"], self.expected_off_topic)
+        self.assertIn("domain", data["answer"].lower())
+
+    def test_server_ask_pdf_domain_healthcare(self):
+        resp = self.client.post(
+            "/ask",
+            json={
+                "text": "please go through the pdf and tell me what domain does this belong to",
+                "domain": "healthcare",
+                "active_sample_file": "INS-H101.pdf"
+            }
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertNotEqual(data["answer"], self.expected_off_topic)
+        self.assertIn("healthcare", data["answer"].lower())
+
+    def test_server_ask_pdf_specific_case(self):
+        resp = self.client.post(
+            "/ask",
+            json={"text": "what domain is case 104"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertNotEqual(data["answer"], self.expected_off_topic)
+        self.assertIn("mortgage", data["answer"].lower())
+        self.assertIn("CASE-104", data["answer"])
+
+    def test_docchase_pdf_domain_query(self):
+        ans = docchase.answer("please go through the pdf and tell me what domain does this belong to")
+        self.assertNotEqual(ans, self.expected_off_topic)
+        self.assertIn("domain", ans.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -288,7 +288,9 @@ async function submitQuestion(text) {
       body: JSON.stringify({
         text: queryText,
         domain: currentDomain,
-        last_case_id: sessionCaseId
+        last_case_id: sessionCaseId || (selectedCase ? selectedCase.case_id : null) || (activeSample ? activeSample.case_id : null),
+        active_sample_id: activeSample ? activeSample.id : null,
+        active_sample_file: activeSample ? (activeSample.filename || activeSample.id) : null
       })
     });
 
@@ -655,6 +657,9 @@ function renderThumbnailStrip() {
 function selectSample(sample, updateInput = false) {
   if (!sample) return;
   activeSample = sample;
+  if (sample.case_id) {
+    sessionCaseId = sample.case_id;
+  }
 
   // Update card active styles
   document.querySelectorAll(".thumb-card").forEach((card) => {
