@@ -141,6 +141,66 @@ class TestGuardrails(unittest.TestCase):
         self.assertNotEqual(ans, self.expected_off_topic)
         self.assertIn("domain", ans.lower())
 
+    # --- Tests for Dynamic Case Details on Follow-Up ---
+    def test_server_ask_followup_specific_details(self):
+        # Follow-up asking for specific details retains active case and returns explicit details
+        resp = self.client.post(
+            "/ask",
+            json={"text": "what are the specific details on that?", "last_case_id": "CASE-101"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["case_id"], "CASE-101")
+        self.assertEqual(data["question_type"], "details")
+        self.assertIn("John Doe", data["answer"])
+        self.assertIn("Form 1003", data["answer"])
+        self.assertIn("borrower signature", data["answer"])
+
+    def test_server_ask_borrower_inquiry(self):
+        resp = self.client.post(
+            "/ask",
+            json={"text": "who is the borrower?", "last_case_id": "CASE-102"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["case_id"], "CASE-102")
+        self.assertIn("Sarah Miller", data["answer"])
+
+    def test_server_ask_confidence_score_inquiry(self):
+        resp = self.client.post(
+            "/ask",
+            json={"text": "what is the confidence score?", "last_case_id": "INS-104"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["case_id"], "INS-104")
+        self.assertIn("0.42", data["answer"])
+        self.assertIn("Emily Davis", data["answer"])
+
+    # --- Tests for Hindi / Hinglish Queries (Always Responding in English) ---
+    def test_server_ask_hinglish_query(self):
+        resp = self.client.post(
+            "/ask",
+            json={"text": "case 101 mein kya missing hai?"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["case_id"], "CASE-101")
+        self.assertEqual(data["question_type"], "missing")
+        self.assertIn("borrower signature is missing", data["answer"])
+
+    def test_server_ask_devanagari_hindi_query(self):
+        resp = self.client.post(
+            "/ask",
+            json={"text": "केस 102 का विवरण बताओ"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["case_id"], "CASE-102")
+        self.assertEqual(data["question_type"], "details")
+        self.assertIn("Sarah Miller", data["answer"])
+        self.assertIn("paystub", data["answer"])
+
 
 if __name__ == "__main__":
     unittest.main()

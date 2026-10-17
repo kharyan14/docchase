@@ -98,6 +98,10 @@ def handle_query(query: str) -> str:
         log_approval(case_id, note=f"Voice approval: '{query_clean}'")
         return f"I've logged your approval for {case_id}. The human decides."
 
+    # Ask: Specific Details
+    if re.search(r"\b(detail|details|specifics|specific|more info|tell me more|who is|borrower|patient|confidence|evidence|missing field|document type)\b", q_lower):
+        return docchase.answer(case_id, "details", query_text=query_clean)
+
     # Ask 2: Context on past cases
     if re.search(r"\b(context|past case|past cases|history|similar)\b", q_lower):
         return docchase.answer(case_id, "context")

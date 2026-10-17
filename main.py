@@ -66,33 +66,40 @@ def get_audio_duration(path):
 
 def find_case_ids(text, open_cases):
     t = text.lower()
+    # Map English and Hindi numerals
+    hindi_digits = {"०": "0", "१": "1", "२": "2", "३": "3", "४": "4", "५": "5", "६": "6", "७": "7", "८": "8", "९": "9"}
+    for hd, ed in hindi_digits.items():
+        t = t.replace(hd, ed)
+
     num_words = {
         "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
         "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+        "ek": "1", "do": "2", "teen": "3", "char": "4", "paanch": "5",
+        "एक": "1", "दो": "2", "तीन": "3", "चार": "4", "पांच": "5",
     }
     for w, d in num_words.items():
         t = re.sub(rf"\b{w}\b", d, t)
     t = re.sub(r"(?<=\d)\s+(?=\d)", "", t)
 
     matches = []
-    is_healthcare = bool(re.search(r"\b(health\s*care|healthcare|insurance)\b", t))
+    is_healthcare = bool(re.search(r"\b(health\s*care|healthcare|insurance)\b|(हेल्थकेयर|स्वास्थ्य|बीमा|हॉस्पिटल)", t))
 
     # 1) "INS", "I N S", "ILS", or healthcare mentions plus digits must map to healthcare case id
-    for m in re.finditer(r"\b(?:i\s*n\s*s|ins|ils|in\s+s)[-\s]?h?(\d+)\b", t):
+    for m in re.finditer(r"(?:\b(?:i\s*n\s*s|ins|ils|in\s+s)|आई\s*एन\s*एस|आईएनएस)[-\s]?h?(\d+)\b", t):
         cid = f"INS-{m.group(1)}"
         if cid in open_cases:
             matches.append((m.start(), cid))
 
     # If user explicitly specified healthcare domain, map any digits to INS cases
     if is_healthcare:
-        for m in re.finditer(r"\b(?:case[-\s]?)?(\d+)\b", t):
+        for m in re.finditer(r"(?:(?:\bcase|केस)[-\s]?)?(\d+)\b", t):
             cid = f"INS-{m.group(1)}"
             if cid in open_cases and not any(c == cid for _, c in matches):
                 matches.append((m.start(), cid))
 
-    # 1) "case" plus digits to the mortgage one (if not explicitly healthcare)
+    # 1) "case" or "केस" plus digits to the mortgage one (if not explicitly healthcare)
     if not is_healthcare:
-        for m in re.finditer(r"\bcase[-\s]?(\d+)\b", t):
+        for m in re.finditer(r"(?:\bcase|केस)[-\s]?(\d+)\b", t):
             cid = f"CASE-{m.group(1)}"
             if cid in open_cases:
                 matches.append((m.start(), cid))

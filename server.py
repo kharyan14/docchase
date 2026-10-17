@@ -212,8 +212,10 @@ async def ask_question(req: AskRequest):
         # Guardrail: sensitive cases never approve, human decides
         if q_type == "approve" and case.get("sensitive_case"):
             answer_text = "This is a sensitive case and cannot be approved. No action is taken, the human decides."
+        elif q_type == "details":
+            answer_text = docchase.format_case_details(case, raw_text)
         else:
-            answer_text = docchase.answer(case_id, q_type)
+            answer_text = docchase.answer(case_id, q_type, query_text=raw_text)
 
         # Follow-ups: after a missing-docs answer, the assistant ends with a short spoken prompt
         if q_type == "missing":
