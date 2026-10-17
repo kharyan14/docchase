@@ -1,15 +1,21 @@
+import asyncio
+import base64
+import json
 import os
 import re
 import subprocess
+import wave
+import io
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import requests
+import websockets
 
 import docchase
 import listen
@@ -41,6 +47,7 @@ class AskRequest(BaseModel):
 
 class SpeakRequest(BaseModel):
     text: str
+    model: Optional[str] = None
 
 
 @app.get("/cases")
@@ -231,15 +238,63 @@ async def ask_question(req: AskRequest):
 @app.post("/voice/speak")
 async def voice_speak(req: SpeakRequest):
     """
-    Calls speak.py to synthesize audio bytes via SLNG TTS and returns the audio bytes.
+    Synthesizes audio bytes via selected SLNG TTS model and returns the audio bytes.
+    Supports deepgram/aura:2 (default) and murf/murftts:falcon.
+    Default controlled by DOCCHASE_TTS_MODEL env var or req.model.
     """
     text = req.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
 
+    tts_model = (req.model or os.environ.get("DOCCHASE_TTS_MODEL", "deepgram/aura:2")).strip()
+
+    keys_to_try = speak.get_active_keys()
+    if not keys_to_try:
+        raise HTTPException(status_code=500, detail="SLNG API key not configured on server.")
+
+    # Murf Falcon via WebSocket
+    if "murf" in tts_model.lower():
+        base_ws = os.environ.get("VOICEAI_BASE_URL", "https://in.api.slng.ai").replace("https://", "wss://").replace("http://", "ws://").rstrip("/")
+        ws_url = f"{base_ws}/v1/tts/murf/murftts:falcon"
+        last_err = None
+        for key in keys_to_try:
+            try:
+                headers = {"Authorization": f"Bearer {key}"}
+                pcm_chunks = []
+                async with websockets.connect(ws_url, additional_headers=headers) as ws:
+                    await ws.send(json.dumps({"text": text, "model": "en-US-marcus"}))
+                    while True:
+                        try:
+                            msg = await asyncio.wait_for(ws.recv(), timeout=6)
+                            if isinstance(msg, bytes):
+                                pcm_chunks.append(msg)
+                            else:
+                                d = json.loads(msg)
+                                if d.get("audio"):
+                                    pcm_chunks.append(base64.b64decode(d["audio"]))
+                                if d.get("is_final") or d.get("type") == "final":
+                                    break
+                        except asyncio.TimeoutError:
+                            break
+                if pcm_chunks:
+                    raw_pcm = b"".join(pcm_chunks)
+                    # Wrap raw 24kHz 16-bit mono PCM into standard WAV container
+                    wav_buf = io.BytesIO()
+                    with wave.open(wav_buf, "wb") as wf:
+                        wf.setnchannels(1)
+                        wf.setsampwidth(2)
+                        wf.setframerate(24000)
+                        wf.writeframes(raw_pcm)
+                    return Response(content=wav_buf.getvalue(), media_type="audio/wav")
+            except Exception as e:
+                last_err = e
+                continue
+        if last_err:
+            raise HTTPException(status_code=502, detail=f"Murf TTS failed: {str(last_err)}")
+
+    # Default: Deepgram Aura-2 via speak.py
     output_wav = Path(__file__).resolve().parent / "server_speak.wav"
     try:
-        # Calls speak.py without playing on server speakers
         speak.speak(text, output_path=str(output_wav), play=False)
         with open(output_wav, "rb") as f:
             audio_bytes = f.read()
@@ -249,10 +304,14 @@ async def voice_speak(req: SpeakRequest):
 
 
 @app.post("/voice/transcribe")
-async def voice_transcribe(audio: UploadFile = File(...)):
+async def voice_transcribe(
+    audio: UploadFile = File(...),
+    stt_model: Optional[str] = Form(None)
+):
     """
     Accepts an audio file upload (browser recording), sends it to the SLNG
-    speech-to-text model (slng/deepgram/nova:3-en), and returns {"text": "..."}.
+    speech-to-text model (slng/deepgram/nova:3-en or sarvam/saaras:v3), and returns {"text": "..."}.
+    Default model is slng/deepgram/nova:3-en (or DOCCHASE_STT_MODEL env var).
     """
     audio_bytes = await audio.read()
     if not audio_bytes:
@@ -262,6 +321,53 @@ async def voice_transcribe(audio: UploadFile = File(...)):
     if not keys_to_try:
         raise HTTPException(status_code=500, detail="SLNG API key not configured on server.")
 
+    chosen_model = (stt_model or os.environ.get("DOCCHASE_STT_MODEL", "slng/deepgram/nova:3-en")).strip()
+
+    # Sarvam Saaras v3 via WebSocket
+    if "sarvam" in chosen_model.lower():
+        temp_in = Path(__file__).resolve().parent / f"temp_sarvam_in_{os.getpid()}"
+        temp_out = Path(__file__).resolve().parent / f"temp_sarvam_out_{os.getpid()}.wav"
+        try:
+            temp_in.write_bytes(audio_bytes)
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(temp_in), "-ar", "16000", "-ac", "1", str(temp_out)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True
+            )
+            wav_bytes_16k = temp_out.read_bytes()
+        except Exception:
+            wav_bytes_16k = audio_bytes
+        finally:
+            if temp_in.exists():
+                temp_in.unlink()
+            if temp_out.exists():
+                temp_out.unlink()
+
+        audio_b64 = base64.b64encode(wav_bytes_16k).decode("utf-8")
+        base_ws = os.environ.get("VOICEAI_BASE_URL", "https://in.api.slng.ai").replace("https://", "wss://").replace("http://", "ws://").rstrip("/")
+        ws_url = f"{base_ws}/v1/stt/sarvam/saaras:v3"
+
+        last_err = None
+        for key in keys_to_try:
+            try:
+                headers = {"Authorization": f"Bearer {key}"}
+                async with websockets.connect(ws_url, additional_headers=headers) as ws:
+                    msg = {"audio": {"data": audio_b64, "sample_rate": 16000, "encoding": "audio/wav"}}
+                    await ws.send(json.dumps(msg))
+                    await ws.send(json.dumps({"type": "flush"}))
+
+                    resp = await asyncio.wait_for(ws.recv(), timeout=12)
+                    data = json.loads(resp)
+                    transcript = data.get("data", {}).get("transcript", "")
+                    return {"text": transcript.strip()}
+            except Exception as e:
+                last_err = e
+                continue
+        if last_err:
+            raise HTTPException(status_code=502, detail=f"Sarvam STT failed: {str(last_err)}")
+
+    # Default: Deepgram Nova-3 via HTTP
     base_url = os.environ.get("VOICEAI_BASE_URL", "https://in.api.slng.ai").rstrip("/")
     endpoint = f"{base_url}/v1/stt/slng/deepgram/nova:3-en"
 

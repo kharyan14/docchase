@@ -20,6 +20,24 @@
         <button class="domain-btn active" id="btnMortgage" type="button" data-domain="mortgage">Mortgage</button>
         <button class="domain-btn" id="btnHealthcare" type="button" data-domain="healthcare">Healthcare</button>
       </div>
+
+      <!-- Model Switch Controls -->
+      <div class="model-switch-bar">
+        <div class="model-select-group">
+          <label for="sttModelSelect">STT:</label>
+          <select id="sttModelSelect" class="model-select" title="Speech-to-Text Model">
+            <option value="slng/deepgram/nova:3-en" selected>Deepgram Nova-3 (Default)</option>
+            <option value="sarvam/saaras:v3">Sarvam Saaras v3</option>
+          </select>
+        </div>
+        <div class="model-select-group">
+          <label for="ttsModelSelect">TTS:</label>
+          <select id="ttsModelSelect" class="model-select" title="Text-to-Speech Model">
+            <option value="deepgram/aura:2" selected>Deepgram Aura 2 (Default)</option>
+            <option value="murf/murftts:falcon">Murf Falcon</option>
+          </select>
+        </div>
+      </div>
     </header>
 
     <!-- Three-Column Active Workbench Layout -->

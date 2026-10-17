@@ -36,6 +36,9 @@ const clearChatBtn = document.getElementById("clearChatBtn");
 const audioStatus = document.getElementById("audioStatus");
 const audioPlayer = document.getElementById("audioPlayer");
 
+const sttModelSelect = document.getElementById("sttModelSelect");
+const ttsModelSelect = document.getElementById("ttsModelSelect");
+
 let sessionCaseId = null;
 
 // Workbench DOM Elements
@@ -343,10 +346,11 @@ async function speakAnswer(textToSpeak) {
   audioStatus.textContent = "Generating voice…";
 
   try {
+    const selectedTtsModel = ttsModelSelect ? ttsModelSelect.value : "deepgram/aura:2";
     const res = await fetch(SPEAK_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: text })
+      body: JSON.stringify({ text: text, model: selectedTtsModel })
     });
 
     if (!res.ok) {
@@ -519,6 +523,9 @@ async function handleRecordingStopped() {
     const isMp4 = rawMime.includes("mp4");
     const filename = isMp4 ? "recording.mp4" : "recording.webm";
     formData.append("audio", audioBlob, filename);
+    if (sttModelSelect) {
+      formData.append("stt_model", sttModelSelect.value);
+    }
 
     const res = await fetch(TRANSCRIBE_ENDPOINT, {
       method: "POST",
