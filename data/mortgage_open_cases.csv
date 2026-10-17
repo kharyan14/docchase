@@ -1,0 +1,6 @@
+case_id,domain,exception_text,expected_type,expected_action,sensitive_case,status,authorization_type,document_type,missing_fields,evidence_references,confidence_score,manual_review_required,supporting_evidence
+CASE-101,mortgage,The borrower forgot to sign the form.,signature,request_missing_document,False,Resolved,,,,,,,
+CASE-102,mortgage,The loan file is missing the most recent paystub required for income verification.,income,request_missing_document,False,New,,,,,,,
+CASE-103,mortgage,The property address in the appraisal differs from the deed record.,address,propose_field_correction,False,New,,,,,,,
+CASE-104,mortgage,The case includes a rare foreign-language tax document that needs specialist review.,low_confidence_extraction,route_to_specialist,False,New,,,,,,,
+CASE-105,mortgage,The loan file references a suspicious transfer document outside the standard workflow.,other,abstain,True,New,,,,,,,

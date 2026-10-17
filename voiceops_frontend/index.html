@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DocChase — Case Assistant</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header with Domain Switcher -->
+    <header class="app-header">
+      <div class="brand-title">
+        <span>DocChase</span>
+        <span class="brand-badge">VoiceOps</span>
+      </div>
+
+      <!-- Domain Toggle -->
+      <div class="domain-toggle">
+        <button class="domain-btn active" id="btnMortgage" type="button" data-domain="mortgage">Mortgage</button>
+        <button class="domain-btn" id="btnHealthcare" type="button" data-domain="healthcare">Healthcare</button>
+      </div>
+    </header>
+
+    <!-- Three-Column Active Workbench Layout -->
+    <div class="columns-wrapper">
+      <!-- COLUMN 1: Case List for selected domain -->
+      <aside class="panel cases-panel">
+        <div class="case-list-header" id="casesHeaderTitle">Mortgage Cases (5)</div>
+        <div class="case-list" id="casesContainer">
+          <!-- Populated from GET /cases?domain=... -->
+        </div>
+      </aside>
+
+      <!-- COLUMN 2: Multi-turn Chat Transcript, Input Box, Hold-to-Talk Mic -->
+      <section class="panel assistant-panel">
+        <!-- Red Banner for Sensitive Cases -->
+        <div class="sensitive-banner" id="sensitiveBanner" hidden>
+          <span aria-hidden="true">⚠️</span>
+          <span>Sensitive case - no action, human decides</span>
+        </div>
+
+        <!-- Selected Case Details Header -->
+        <div class="case-details-box">
+          <div class="details-headline" id="caseHeadline">Loading case…</div>
+          <div class="details-exception" id="caseExceptionText">-</div>
+        </div>
+
+        <!-- Chat Header with Clear chat & Status -->
+        <div class="chat-header-bar">
+          <span class="chat-header-title">Chat Transcript</span>
+          <div class="chat-header-actions">
+            <span class="audio-status" id="audioStatus">Ready.</span>
+            <button class="btn-clear-chat" id="clearChatBtn" type="button" title="Clear chat messages">
+              Clear chat
+            </button>
+          </div>
+        </div>
+
+        <!-- Scrolling Multi-Turn Chat Transcript (Newest at Bottom) -->
+        <div class="chat-transcript" id="chatTranscript" role="log" aria-live="polite">
+          <div class="chat-turn assistant-turn">
+            <div class="bubble assistant-bubble">
+              Welcome to DocChase. Select a case from the left or press and hold the mic to ask a question.
+            </div>
+          </div>
+        </div>
+
+        <!-- 4 Clickable Quick Prompts / Examples -->
+        <div class="examples-row">
+          <button class="example-btn" type="button" data-query="what is missing">What is missing?</button>
+          <button class="example-btn" type="button" data-query="want the context">Want the context</button>
+          <button class="example-btn" type="button" data-query="what about the decision">What about the decision?</button>
+          <button class="example-btn" type="button" data-query="approve it">Approve it</button>
+        </div>
+
+        <!-- Question Row (Text input + Hold-to-Talk + Ask) -->
+        <div class="question-row">
+          <input 
+            type="text" 
+            id="questionInput" 
+            class="question-input" 
+            placeholder="Ask or say 'it', 'what about decision', 'approve it'..."
+          />
+          <button class="btn-mic" id="micBtn" type="button" title="Hold to talk (records while pressed, releases to ask)">
+            <span class="mic-icon" id="micIcon">🎙️</span>
+            <span class="mic-label" id="micLabel">Hold to talk</span>
+          </button>
+          <button class="btn-ask" id="askBtn" type="button">Ask</button>
+        </div>
+        <audio id="audioPlayer" hidden></audio>
+      </section>
+
+      <!-- COLUMN 3: Active Document Workbench with Thumbnail Preview -->
+      <section class="panel workbench-panel">
+        <div class="workbench-header">
+          <div class="workbench-title-area">
+            <span class="workbench-title">Document Workbench</span>
+            <span class="workbench-badge" id="workbenchCountBadge">Sample Packets</span>
+          </div>
+          <div class="workbench-tabs">
+            <button class="wb-tab active" id="tabDomainSamples" type="button">Domain Samples</button>
+            <button class="wb-tab" id="tabAllSamples" type="button">All (12)</button>
+          </div>
+        </div>
+
+        <!-- Thumbnail Preview Carousel / Strip -->
+        <div class="thumbnail-strip" id="thumbnailStrip">
+          <!-- Populated from GET /api/samples -->
+        </div>
+
+        <!-- Active Document Preview Viewer -->
+        <div class="active-preview-card" id="activePreviewCard">
+          <div class="preview-card-header">
+            <div class="preview-title-block">
+              <div class="preview-doc-title" id="previewDocTitle">Select a document</div>
+              <div class="preview-doc-meta" id="previewDocMeta">No document loaded</div>
+            </div>
+            <div class="preview-actions">
+              <button class="btn-ask-doc" id="askDocBtn" type="button" title="Ask question about this sample document">
+                💬 Query doc
+              </button>
+              <a href="#" target="_blank" class="btn-open-doc" id="openDocLink" title="Open full sample file">
+                ↗ Full Doc
+              </a>
+            </div>
+          </div>
+
+          <!-- Document preview viewport -->
+          <div class="preview-viewport" id="previewViewport">
+            <img id="previewImage" src="" alt="Sample Document Preview" />
+            <div class="preview-placeholder" id="previewPlaceholder" hidden>
+              Select a sample document thumbnail above to inspect.
+            </div>
+          </div>
+
+          <!-- Document description / summary footer -->
+          <div class="preview-desc" id="previewDesc">
+            Loading document metadata...
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- BOTTOM: Greyed out upload card -->
+    <div class="upload-card-bottom" aria-disabled="true">
+      <div>
+        <div class="upload-card-title">Next: document extraction (not built yet)</div>
+        <div class="upload-card-sub">Upload checklists and automated document text extraction will be enabled here.</div>
+      </div>
+      <span class="upload-pill">Upcoming</span>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
