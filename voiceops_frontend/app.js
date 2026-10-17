@@ -787,3 +787,53 @@ if (askDocBtn) {
 // Initial load
 loadCases();
 loadSamples();
+
+// Demo Scene State Controller for Automated Video Recording
+const urlParams = new URLSearchParams(window.location.search);
+const sceneParam = urlParams.get("scene");
+if (sceneParam) {
+  setTimeout(() => {
+    if (sceneParam === "1") {
+      selectCase("CASE-101");
+    } else if (sceneParam === "2") {
+      selectCase("CASE-101");
+      if (sttModelSelect) sttModelSelect.value = "sarvam/saaras:v3";
+      if (ttsModelSelect) ttsModelSelect.value = "murf/murftts:falcon";
+      audioStatus.textContent = "STT: sarvam/saaras:v3 | TTS: murf/murftts:falcon (Active Switches)";
+    } else if (sceneParam === "3") {
+      selectCase("CASE-101");
+      questionInput.value = "what is missing in case 101?";
+      addChatMessage("user", "what is missing in case 101?");
+      addChatMessage("assistant", "The borrower signature is missing from the form; want me to request the missing document? Want the context or the decision?");
+      audioStatus.textContent = "Playing voice response (deepgram/aura:2)...";
+    } else if (sceneParam === "4") {
+      selectCase("CASE-101");
+      addChatMessage("user", "what is missing in case 101?");
+      addChatMessage("assistant", "The borrower signature is missing from the form; want me to request the missing document? Want the context or the decision?");
+      addChatMessage("user", "what are the specific details on that?");
+      addChatMessage("assistant", "Specific details for CASE-101 (John Doe, Mortgage Underwriting & Closing): Document: Uniform Residential Loan Application (Form 1003). Exception: The borrower forgot to sign the form. Missing: borrower signature on page 3. Assigned action: request the missing borrower signature. Status: Resolved. Confidence score: 0.99 (99%).");
+      audioStatus.textContent = "Dynamic explicit case details delivered";
+    } else if (sceneParam === "5") {
+      selectCase("CASE-101");
+      if (sttModelSelect) sttModelSelect.value = "sarvam/saaras:v3";
+      addChatMessage("user", "borrower kaun hai? is case ke details batao");
+      addChatMessage("assistant", "For CASE-101, the borrower is John Doe in Mortgage Underwriting & Closing. Specific details: Form 1003 missing borrower signature on page 3. Extraction confidence: 0.99 (99%).");
+      audioStatus.textContent = "Transcribed via Sarvam Saaras v3 (Hindi) -> Responding in English";
+    } else if (sceneParam === "6") {
+      switchDomain("healthcare");
+      selectCase("INS-101");
+      if (sttModelSelect) sttModelSelect.value = "sarvam/saaras:v3";
+      if (ttsModelSelect) ttsModelSelect.value = "murf/murftts:falcon";
+      addChatMessage("user", "what is missing in INS 101?");
+      addChatMessage("assistant", "The authorization request is missing the required clinical note; want me to request the missing document? Want the context or the decision?");
+      audioStatus.textContent = "Healthcare Prior Authorization & Claims Workbench active";
+    } else if (sceneParam === "7") {
+      switchDomain("healthcare");
+      selectCase("INS-105");
+      sensitiveBanner.classList.remove("hidden");
+      addChatMessage("user", "approve case INS 105");
+      addChatMessage("assistant", "This is a sensitive case and cannot be approved. No action is taken, the human decides.");
+      audioStatus.textContent = "Sensitive case quarantine active - Automated action blocked";
+    }
+  }, 450);
+}

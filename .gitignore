@@ -11,4 +11,5 @@ build/
 *.egg-info/
 *.wav
 *.log
-
+demo_scenes/
+demo_frame1.png
